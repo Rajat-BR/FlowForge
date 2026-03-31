@@ -12,7 +12,7 @@ from environment import APIWorkflowEnv, Action
 from tasks import TASKS
 
 app = FastAPI(
-    title="OpenEnv: API Workflow Orchestration",
+    title="FlowForge: API Workflow Orchestration",
     description="An OpenEnv environment where agents must orchestrate correct API workflows.",
     version="1.0.0",
 )
