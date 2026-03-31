@@ -142,18 +142,14 @@ def parse_workflow(raw: str) -> Optional[List[Dict]]:
 # ─── LLM Agent ────────────────────────────────────────────────────────────────
 
 def llm_agent(task: Dict, history: List[str]) -> Action:
-    """
-    Call LLM via OpenAI-compatible client.
-    Falls back to rule-based agent if env vars are absent or on any error.
-    """
     if not MODEL_NAME:
         if DEBUG:
             print("  [INFO] MODEL_NAME not set — using rule-based fallback")
         return rule_based_agent(task)
 
-    client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
-
     try:
+        client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
+
         response = client.chat.completions.create(
             model=MODEL_NAME,
             messages=[
@@ -163,6 +159,7 @@ def llm_agent(task: Dict, history: List[str]) -> Action:
             max_tokens=MAX_TOKENS,
             temperature=TEMPERATURE,
         )
+
         raw = response.choices[0].message.content or ""
         if DEBUG:
             print(f"  [LLM raw] {raw[:200]!r}")
@@ -175,7 +172,7 @@ def llm_agent(task: Dict, history: List[str]) -> Action:
         return Action(workflow=workflow)
 
     except Exception as e:
-        print(f"  [ERROR] LLM call failed: {e} — using rule-based fallback")
+        print(f"  [ERROR] LLM failed: {e} — using fallback")
         return rule_based_agent(task)
 
 
