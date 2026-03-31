@@ -32,7 +32,7 @@ API_KEY      = os.getenv("HF_TOKEN") or os.getenv("API_KEY") or "dummy"
 MODEL_NAME   = os.getenv("MODEL_NAME")
 
 MAX_TOKENS  = 512
-TEMPERATURE = 0.0       # deterministic — same input → same output
+TEMPERATURE = 0.0       
 DEBUG       = False
 
 FALLBACK_WORKFLOW: List[Dict] = []   # returned on unrecoverable parse failure
@@ -86,7 +86,7 @@ def build_user_message(task: Dict, history: List[str]) -> str:
     )
 
 
-# ─── History helpers (matching sample pattern) ────────────────────────────────
+# ─── History helpers  ────────────────────────────────
 
 def build_history_lines(history: List[str]) -> str:
     if not history:
