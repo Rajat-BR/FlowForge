@@ -141,6 +141,13 @@ run_test("Hard Wrong DB Params", {
     ]
 }, task_index=2)
 
+print("\n=== Duplicate API Test ===")
+workflow = [
+    {"api": "flight_api", "params": {"from_city": "NYC", "to_city": "Paris"}},
+    {"api": "flight_api", "params": {"from_city": "NYC", "to_city": "Paris"}},
+]
+obs, reward, done, info = env.step(Action(workflow=workflow))
+print("Reward:", reward)
 
 # ───────────────── EDGE CASES ─────────────────
 
