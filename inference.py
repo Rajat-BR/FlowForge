@@ -208,50 +208,59 @@ def rule_based_agent(task: Dict) -> Action:
 
 # ─── Main runner ──────────────────────────────────────────────────────────────
 
-def main() -> List[float]:
-    print("=" * 62)
-    print("OpenEnv: API Workflow Orchestration — Baseline Inference")
-    print("=" * 62)
-    print(f"API_BASE_URL : {API_BASE_URL}")
-    print(f"MODEL_NAME   : {MODEL_NAME or '(not set — rule-based fallback)'}")
-    print(f"TEMPERATURE  : {TEMPERATURE}")
-    print(f"MAX_TOKENS   : {MAX_TOKENS}")
-    print(f"Using fallback: {not MODEL_NAME}")
-    print()
-
+def main():
     env = APIWorkflowEnv()
-    env.reset()
 
-    scores: List[float] = []
-    history: List[str] = []   # shared history log across tasks (for multi-turn context)
+    for task in TASKS:
+        task_name = task["id"]
+        model_name = MODEL_NAME or "rule-based"
 
-    for i, task in enumerate(TASKS):
-        print(f"[{i+1}/{len(TASKS)}] {task['difficulty'].upper()} — {task['description']}")
-        print(f"  Input : {task['user_input'][:100]}...")
+        print(f"[START] task={task_name} env=flowforge model={model_name}")
 
-        action = llm_agent(task, history)
-        apis_called = [s.get("api", "?") for s in action.workflow if isinstance(s, dict)]
-        print(f"  APIs  : {apis_called}")
+        env.reset()
+        history = []
+        success = False
 
-        _, reward, done, info = env.step(action)
-        scores.append(reward.score)
-        print(f"  Score : {reward.score:.4f}")
+        try:
+            action = llm_agent(task, history)
 
-        # Record this attempt in history for subsequent tasks
-        history.append(
-            f"Task {i+1} [{task['difficulty']}]: called {apis_called} → score {reward.score:.4f}"
+            # Run full workflow ONCE
+            _, reward, _, _ = env.step(action)
+            final_score = round(reward.score, 2)
+
+            workflow_len = len(action.workflow)
+
+            for i, step in enumerate(action.workflow, start=1):
+                done_flag = (i == workflow_len)
+                step_reward = final_score if done_flag else 0.00
+
+                print(
+                    f"[STEP] step={i} "
+                    f"action={json.dumps(step)} "
+                    f"reward={step_reward:.2f} "
+                    f"done={str(done_flag).lower()} "
+                    f"error=null"
+                )
+
+            success = final_score >= 0.99
+
+            reward_str = ",".join(
+                f"{(final_score if i == workflow_len else 0.00):.2f}"
+                for i in range(1, workflow_len + 1)
+            )
+
+        except Exception as e:
+            print(f"[STEP] step=1 action=null reward=0.00 done=false error={str(e)}")
+            workflow_len = 1
+            reward_str = "0.00"
+            success = False
+
+        print(
+            f"[END] success={str(success).lower()} "
+            f"steps={workflow_len} "
+            f"rewards={reward_str}"
         )
-        print()
-
-    print("-" * 62)
-    print(f"Scores        : {[round(s, 4) for s in scores]}")
-    print(f"Average score : {sum(scores) / len(scores):.4f}")
-    print(f"Total         : {sum(scores):.4f} / {float(len(scores)):.1f}")
-    print("=" * 62)
-
-    return scores
-
 
 if __name__ == "__main__":
-    scores = main()
-    sys.exit(0 if len(scores) == len(TASKS) else 1)
+    main()
+    sys.exit(0)

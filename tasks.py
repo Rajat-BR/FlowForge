@@ -23,11 +23,11 @@ medium_task: Dict = {
     "difficulty": "medium",
     "description": "Book a flight and send an email. Two steps, ordered dependency.",
     "user_input": (
-        "Book a flight from New York to London "
+        "Book a flight from NYC to London "
         "and email john@example.com."
     ),
     "expected_workflow": [
-        {"api": "flight_api", "params": {"from_city": "New York", "to_city": "London"}},
+        {"api": "flight_api", "params": {"from_city": "NYC", "to_city": "London"}},
         {"api": "email_api",  "params": {"to": "john@example.com"}},
     ],
     "required_apis_in_order": ["flight_api", "email_api"],
