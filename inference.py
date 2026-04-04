@@ -25,7 +25,7 @@ from environment import APIWorkflowEnv, Action
 from tasks import TASKS
 
 
-# ─── Configuration (module-level constants, matching sample conventions) ───────
+# ─── Configuration ───────
 
 API_BASE_URL = os.getenv("API_BASE_URL") or "https://router.huggingface.co/v1"
 HF_TOKEN = os.getenv("HF_TOKEN")
@@ -41,7 +41,7 @@ FALLBACK_WORKFLOW: List[Dict] = []   # returned on unrecoverable parse failure
 # Regex to strip any leading label like "workflow:" or "answer:" from LLM output
 LABEL_PREFIX_RE = re.compile(r"^(workflow|answer|output|result)\s*[:\-]\s*", re.IGNORECASE)
 # Regex to find a JSON array anywhere in the response
-JSON_ARRAY_RE  = re.compile(r"\[.*\]", re.DOTALL)
+JSON_ARRAY_RE = re.compile(r"\[[\s\S]*?\]")
 
 
 # ─── Prompts ──────────────────────────────────────────────────────────────────
@@ -139,10 +139,17 @@ def parse_workflow(raw: str) -> Optional[List[Dict]]:
         print(f"  [WARN] Could not parse workflow from: {raw[:120]!r}")
     return None
 
+    
+
 
 # ─── LLM Agent ────────────────────────────────────────────────────────────────
 
 def llm_agent(task: Dict, history: List[str]) -> Action:
+    if MODEL_NAME and not HF_TOKEN:
+        if DEBUG:
+            print("[WARN] HF_TOKEN missing — using fallback")
+        return rule_based_agent(task)
+    
     if not MODEL_NAME:
         if DEBUG:
             print("  [INFO] MODEL_NAME not set — using rule-based fallback")
@@ -159,6 +166,7 @@ def llm_agent(task: Dict, history: List[str]) -> Action:
             ],
             max_tokens=MAX_TOKENS,
             temperature=TEMPERATURE,
+            timeout=30,
         )
 
         raw = response.choices[0].message.content or ""
@@ -166,8 +174,9 @@ def llm_agent(task: Dict, history: List[str]) -> Action:
             print(f"  [LLM raw] {raw[:200]!r}")
 
         workflow = parse_workflow(raw)
-        if workflow is None:
-            print("  [WARN] parse failed — using rule-based fallback")
+
+        if not isinstance(workflow, list) or len(workflow) == 0:
+            print("  [WARN] invalid/empty workflow — using rule-based fallback")
             return rule_based_agent(task)
 
         return Action(workflow=workflow)
@@ -227,6 +236,8 @@ def main():
 
         try:
             action = llm_agent(task, history)
+            if not action.workflow:
+                action = rule_based_agent(task)
 
             # Run full workflow ONCE
             _, reward, _, _ = env.step(action)
@@ -235,23 +246,25 @@ def main():
             workflow_len = len(action.workflow)
 
             for i, step in enumerate(action.workflow, start=1):
+                step = {
+                    "api": step.get("api", "unknown"),
+                    "params": step.get("params", {})
+                }
                 done_flag = (i == workflow_len)
-                step_reward = final_score if done_flag else 0.00
+                step_reward = final_score if done_flag else None
+                reward_str = f"{step_reward:.2f}" if step_reward is not None else "null"
 
                 print(
                     f"[STEP] step={i} "
                     f"action={json.dumps(step)} "
-                    f"reward={step_reward:.2f} "
+                    f"reward={reward_str} "
                     f"done={str(done_flag).lower()} "
                     f"error=null"
                 )
 
             success = final_score >= 0.95
 
-            reward_str = ",".join(
-                f"{(final_score if i == workflow_len else 0.00):.2f}"
-                for i in range(1, workflow_len + 1)
-            )
+            reward_str = f"{final_score:.2f}"
 
         except Exception as e:
             print(f"[STEP] step=1 action=null reward=0.00 done=false error={str(e)}")
@@ -262,7 +275,7 @@ def main():
         print(
             f"[END] success={str(success).lower()} "
             f"steps={workflow_len} "
-            f"rewards={reward_str}"
+            f"final_reward={reward_str}"
         )
 
         

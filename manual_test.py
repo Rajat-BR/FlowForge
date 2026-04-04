@@ -2,11 +2,23 @@ from environment import APIWorkflowEnv, Action
 
 env = APIWorkflowEnv()
 
+from environment import APIWorkflowEnv, Action
+
+def run_workflow(workflow):
+    env = APIWorkflowEnv()
+    env.reset()
+    
+    obs, reward, done, info = env.step(Action(workflow=workflow))
+    
+    print("Workflow:", workflow)
+    print("Score:", reward.score)
+    print("API Results:", info["api_results"])
+
 
 def run_test(name, action, task_index=0):
     print(f"\n=== {name} ===")
     env.reset()
-    env._task_index = task_index  # 🔥 critical fix
+    env._task_index = task_index  
 
     try:
         obs, reward, done, info = env.step(Action(**action))
@@ -158,3 +170,46 @@ run_test("Garbage Input", {
 run_test("Empty Workflow", {
     "workflow": []
 })
+
+print("\n=== LLM PIPELINE BREAK TESTS ===\n")
+
+from inference import parse_workflow, llm_agent, rule_based_agent
+
+def test_raw_input(raw, label):
+    print(f"\n--- {label} ---")
+    
+    workflow = parse_workflow(raw)
+    
+    if not isinstance(workflow, list) or not workflow:
+        print("Parsed: INVALID → fallback expected")
+    else:
+        print("Parsed:", workflow)
+
+
+# 🔴 Test cases
+
+test_raw_input("bro idk what to do 🤡", "Garbage Text")
+
+test_raw_input('{"api": "flight_api"}', "Wrong JSON Type")
+
+test_raw_input("[]", "Empty List")
+
+test_raw_input("""
+Here is answer:
+[{"api": "flight_api", "params": {"from_city": "NYC", "to_city": "Paris"}}]
+Extra:
+[{"api": "email_api", "params": {"to": "x@y.com"}}]
+""", "Multiple JSON Blocks")
+
+test_raw_input("[{api: flight_api}]", "Broken JSON")
+
+test_raw_input('[{"tool": "flight_api"}]', "Missing Keys")
+
+test_raw_input('[{"api": 123, "params": "wrong"}]', "Malformed Step")
+
+print("\n=== EXECUTION BREAK TESTS ===\n")
+
+run_workflow([{"tool": "flight_api"}])
+run_workflow([{"api": 123, "params": "wrong"}])
+run_workflow([{"api": "unknown_api", "params": {}}])
+run_workflow([{"api": "flight_api", "params": {}}])  # missing params

@@ -120,7 +120,7 @@ class APIWorkflowEnv:
             if not isinstance(params, dict):
                 params = {}
 
-            fn = API_REGISTRY.get(api_name)
+            fn = API_REGISTRY.get(api_name.strip().lower())
             if fn is None:
                 result = {"status": "error", "reason": f"unknown api '{api_name}'"}
             else:
@@ -151,9 +151,7 @@ class APIWorkflowEnv:
 
         # Reset flags for next task but preserve history
         if not done:
-            flags = _fresh_state()
-            flags["history"] = self._env_state["history"]
-            self._env_state = flags
+            self._env_state = _fresh_state()
 
         obs    = self._make_observation()
         reward = Reward(score=round(score, 4))
