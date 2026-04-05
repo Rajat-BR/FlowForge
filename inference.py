@@ -245,6 +245,7 @@ def main():
             final_score = round(reward.score, 2)
 
             workflow_len = len(action.workflow)
+            rewards = []
 
             for i, step in enumerate(action.workflow, start=1):
                 step = {
@@ -252,13 +253,13 @@ def main():
                     "params": step.get("params", {})
                 }
                 done_flag = (i == workflow_len)
-                step_reward = final_score if done_flag else None
-                reward_str = f"{step_reward:.2f}" if step_reward is not None else "null"
+                step_reward = final_score if done_flag else 0.0
+                rewards.append(step_reward)
 
                 print(
                     f"[STEP] step={i} "
                     f"action={json.dumps(step)} "
-                    f"reward={reward_str} "
+                    f"reward={step_reward:.2f} "
                     f"done={str(done_flag).lower()} "
                     f"error=null"
                 )
@@ -273,10 +274,14 @@ def main():
             reward_str = "0.00"
             success = False
 
+        score = final_score
+        rewards_str = ",".join(f"{r:.2f}" for r in rewards)
+
         print(
             f"[END] success={str(success).lower()} "
             f"steps={workflow_len} "
-            f"final_reward={reward_str}"
+            f"score={score:.2f} "
+            f"rewards={rewards_str}"
         )
 
         
