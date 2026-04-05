@@ -1,3 +1,13 @@
+---
+title: flowforge-openenv
+emoji: ⚙️
+colorFrom: blue
+colorTo: purple
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # FlowForge: Evaluating AI Agents in Real-World Workflows
 
 FlowForge is a system for evaluating whether AI agents can reliably execute multi-step real-world tasks using tools.
