@@ -231,10 +231,12 @@ def main():
             action = llm_agent(task, history)
 
             if not action.workflow:
+                if DEBUG:
+                    print("[WARN] Falling back to rule-based")
                 action = rule_based_agent(task)
 
             _, reward, _, _ = env.step(action)
-            final_score = round(reward.score, 2)
+            final_score = max(min(round(reward.score, 2), 0.99), 0.01)
 
             workflow_len = len(action.workflow)
 
@@ -245,7 +247,7 @@ def main():
                 }
 
                 done_flag = (i == workflow_len)
-                step_reward = final_score if done_flag else 0.0
+                step_reward = final_score if done_flag else 0.01
                 rewards.append(step_reward)
 
                 print(
@@ -259,10 +261,10 @@ def main():
             success = final_score >= 0.95
 
         except Exception as e:
-            print(f"[STEP] step=1 action=null reward=0.00 done=false error={str(e)}")
+            print(f"[STEP] step=1 action=null reward=0.01 done=false error={str(e)}")
             workflow_len = 1
-            rewards = [0.0]
-            final_score = 0.0
+            rewards = [0.01]
+            final_score = 0.01
             success = False
 
         rewards_str = ",".join(f"{r:.2f}" for r in rewards)
