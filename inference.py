@@ -18,6 +18,7 @@ import json
 import sys
 import textwrap
 from typing import List, Optional, Dict
+sys.stdout.reconfigure(encoding='utf-8')
 
 from openai import OpenAI
 
@@ -28,9 +29,8 @@ from tasks import TASKS
 # ─── Configuration ───────
 
 API_BASE_URL = os.getenv("API_BASE_URL") or "https://router.huggingface.co/v1"
-HF_TOKEN = os.getenv("HF_TOKEN")
-
-MODEL_NAME   = os.getenv("MODEL_NAME")
+API_KEY = os.getenv("API_KEY") or os.getenv("HF_TOKEN")
+MODEL_NAME = os.getenv("MODEL_NAME") or "Qwen/Qwen2.5-72B-Instruct"
 
 MAX_TOKENS  = 512
 TEMPERATURE = 0.0       
@@ -143,27 +143,21 @@ def parse_workflow(raw: str) -> Optional[List[Dict]]:
     
 
 
+
 # ─── LLM Agent ────────────────────────────────────────────────────────────────
 
 def llm_agent(task: Dict, history: List[str]) -> Action:
-    if MODEL_NAME and not HF_TOKEN:
-        if DEBUG:
-            print("[WARN] HF_TOKEN missing — using fallback")
-        return rule_based_agent(task)
-    
-    if not MODEL_NAME:
-        if DEBUG:
-            print("  [INFO] MODEL_NAME not set — using rule-based fallback")
-        return rule_based_agent(task)
-
     try:
-        client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
+        client = OpenAI(
+            base_url=API_BASE_URL,
+            api_key=API_KEY
+        )
 
         response = client.chat.completions.create(
             model=MODEL_NAME,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user",   "content": build_user_message(task, history)},
+                {"role": "user", "content": build_user_message(task, history)},
             ],
             max_tokens=MAX_TOKENS,
             temperature=TEMPERATURE,
@@ -171,22 +165,17 @@ def llm_agent(task: Dict, history: List[str]) -> Action:
         )
 
         raw = response.choices[0].message.content or ""
-        if DEBUG:
-            print(f"  [LLM raw] {raw[:200]!r}")
-
         workflow = parse_workflow(raw)
 
         if not isinstance(workflow, list) or len(workflow) == 0:
-            print("  [WARN] invalid/empty workflow — using rule-based fallback")
             return rule_based_agent(task)
 
         return Action(workflow=workflow)
 
     except Exception as e:
         if DEBUG:
-            print(f"[ERROR] LLM failed: {e}")
-        return rule_based_agent(task)
-
+            print(f"[LLM ERROR] {e}")
+        return rule_based_agent(task)   
 
 # ─── Rule-Based Agent (deterministic fallback) ────────────────────────────────
 
@@ -221,44 +210,47 @@ def rule_based_agent(task: Dict) -> Action:
 # ─── Main runner ──────────────────────────────────────────────────────────────
 
 def main():
+
     env = APIWorkflowEnv()
     env.reset()
 
     for task in TASKS:
         task_name = task["id"]
         model_name = MODEL_NAME or "rule-based"
-        
 
         print(f"[START] task={task_name} env=flowforge model={model_name}")
 
-        
         history = []
+
+        final_score = 0.0
+        workflow_len = 0
+        rewards = []
         success = False
 
         try:
             action = llm_agent(task, history)
+
             if not action.workflow:
                 action = rule_based_agent(task)
 
-            # Run full workflow ONCE
             _, reward, _, _ = env.step(action)
             final_score = round(reward.score, 2)
 
             workflow_len = len(action.workflow)
-            rewards = []
 
             for i, step in enumerate(action.workflow, start=1):
-                step = {
+                step_clean = {
                     "api": step.get("api", "unknown"),
                     "params": step.get("params", {})
                 }
+
                 done_flag = (i == workflow_len)
                 step_reward = final_score if done_flag else 0.0
                 rewards.append(step_reward)
 
                 print(
                     f"[STEP] step={i} "
-                    f"action={json.dumps(step)} "
+                    f"action={json.dumps(step_clean)} "
                     f"reward={step_reward:.2f} "
                     f"done={str(done_flag).lower()} "
                     f"error=null"
@@ -266,24 +258,21 @@ def main():
 
             success = final_score >= 0.95
 
-            reward_str = f"{final_score:.2f}"
-
         except Exception as e:
             print(f"[STEP] step=1 action=null reward=0.00 done=false error={str(e)}")
             workflow_len = 1
-            reward_str = "0.00"
+            rewards = [0.0]
+            final_score = 0.0
             success = False
 
-        score = final_score
         rewards_str = ",".join(f"{r:.2f}" for r in rewards)
 
         print(
             f"[END] success={str(success).lower()} "
             f"steps={workflow_len} "
-            f"score={score:.2f} "
+            f"score={final_score:.2f} "
             f"rewards={rewards_str}"
         )
-
         
 
 if __name__ == "__main__":
